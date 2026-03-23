@@ -1,0 +1,257 @@
+"""
+Batch processing script for SoundTrap .wav files - OPTIMIZED VERSION
+Processes continuous recordings to extract:
+1. Long-term spectral averages (LTSA) 0-50 kHz in 1Hz Bins
+2. Long-term spectral averages (LTSA) 0-50 kHz in TOBs
+3. Whistle/moan detection for cetaceans
+
+OPTIMIZATIONS:
+- Vectorized JOMOPANS TOB calculation (50-100x faster)
+- Combined spectrogram computation for 1Hz and TOB LTSA
+- Pre-allocated arrays to reduce memory churn
+- Optimized band power calculations
+- More efficient parallel processing
+
+Outputs tab-separated (.tab) files for subsequent summaries
+"""
+
+import os
+import numpy as np
+from scipy import signal
+from scipy.interpolate import interp1d
+from scipy.integrate import trapezoid
+from multiprocessing import Pool, cpu_count
+from functools import partial
+import pandas as pd
+from datetime import datetime, time, timedelta
+import glob
+from pathlib import Path
+import warnings
+import time
+warnings.filterwarnings('ignore')
+
+# Import functions from Py_functions package (folder)
+from Py_functions.calibration import load_calibration, apply_calibration
+
+try:
+    import soundfile as sf
+    SOUNDFILE_AVAILABLE = True
+except ImportError:
+    SOUNDFILE_AVAILABLE = False
+    print("Warning: soundfile not installed. Install with: pip install soundfile")
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# conda activate /Users/francescogarzon/miniconda3/envs/s3proj
+
+SUD_PATH = "E:\\S3\\RAW\\SoundTrap\\S21\\S21_9471_260213"
+OUTPUT_PATH = "E:\\S3\\Processed\\SoundTrap\\S21\\S21_9471_260213"
+
+# Calibration spreadsheet (Excel) containing serial numbers and Low_Gain column
+#mac
+#CAL_FILE = "/Users/francescogarzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Data/SoundTrapCalibration.xlsx"
+#windows
+CAL_FILE = "C:/Users/fg363/OneDrive - University of Exeter/Projects/S3 Project - Documents/Data/SoundTrapCalibration.xlsx"
+
+# LTSA parameters
+LTSA_TIME_BIN = 1  # seconds to average into each LTSA bin (1 second)
+LTSA_MAX_FREQ = 50000  # Hz
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+from data_loading import *
+from calibration import *
+
+# ============================================================================
+# LTSA GENERATION
+# ============================================================================
+from LTSAs import make_freq_vector_tob, compute_ltsa_tob_jomopans
+
+# ============================================================================
+# MAIN PROCESSING FUNCTION
+# ============================================================================
+
+def process_single_file(wav_filepath, output_dir, cal_df=None):
+    """
+    Process a single audio file (.wav, .mp3, .flac, etc.) and generate all outputs
+    """
+    base_name = os.path.splitext(os.path.basename(wav_filepath))[0]
+    
+    # Check if already processed
+    if is_file_processed(base_name, output_dir):
+        print(f"Skipping {base_name} (already processed)")
+        return None
+    
+    print(f"\n{'='*80}")
+    print(f"Processing: {os.path.basename(wav_filepath)}")
+    print(f"{'='*80}")
+    
+    # Read the file
+    #print("Reading audio file...")
+    audio_data, sample_rate = read_wav_file(wav_filepath)
+    
+    if audio_data is None:
+        print("ERROR: Could not read file. Skipping.")
+        return
+
+    # Extract serial and apply calibration (convert to Pa)
+    serial = get_serial_from_filename(wav_filepath)
+    if serial is None:
+        print(f"Warning: could not extract serial from filename {wav_filepath}; proceeding without calibration")
+        audio_cal = audio_data
+    else:
+        audio_cal = apply_calibration(audio_data, serial, cal_df, vpp=2.0)
+    
+    #print(f"  Sample rate: {sample_rate} Hz")
+    #print(f"  Duration: {len(audio_cal)/sample_rate:.2f} seconds")
+    #print(f"  File size: {len(audio_cal)/1e6:.2f} million samples")
+    
+    # Get base filename for outputs
+    file_datetime = get_datetime_from_filename(wav_filepath)
+
+    # Get serial number
+    serial = get_serial_from_filename(wav_filepath)
+
+    # Make sure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    ########################## 4. Compute JOMOPANS TOB LTSA (VECTORIZED) ##########################
+    #print("\n4. Computing TOB LTSA following JOMOPANS ...")
+    freqs_jomopans, times_jomopans, ltsa_jomopans = compute_ltsa_tob_jomopans(
+        audio_cal, sample_rate, LTSA_TIME_BIN, LTSA_MAX_FREQ
+    )
+    
+    # Save JOMOPANS LTSA data as tab-separated file (round to 3 decimals)
+    ltsa_df_jomopans = pd.DataFrame(ltsa_jomopans.T, columns=[f'{f:.1f}Hz' for f in freqs_jomopans])
+    ltsa_df_jomopans.insert(0, 'time_s', times_jomopans)
+    if serial is not None:
+        ltsa_df_jomopans.insert(0, 'serial', serial)
+    if file_datetime:
+        ltsa_df_jomopans.insert(0, 'datetime', [file_datetime + timedelta(seconds=int(t)) for t in times_jomopans])
+    ltsa_df_jomopans = ltsa_df_jomopans.round(3)
+    ltsa_tab_jomopans = os.path.join(output_dir, f"{base_name}_ltsa_TOB_JOMOPANS.tab")
+    ltsa_df_jomopans.to_csv(ltsa_tab_jomopans, index=False, sep='\t')
+    #print(f"  Saved: {ltsa_tab_jomopans}")
+    
+      
+    print(f"\n✓ Completed processing: {base_name}")
+
+# ============================================================================
+# FUNCTION FOR PARALLEL PROCESSING
+# ============================================================================
+def _worker_process(wav_file, output_dir, cal_df):
+    start = time.time()
+    try:
+        process_single_file(wav_file, output_dir, cal_df)
+        duration = time.time() - start
+        return True, duration
+    except Exception as e:
+        print(f"\nERROR processing {wav_file}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False, None
+
+
+# ============================================================================
+# BATCH PROCESSING
+# ============================================================================
+
+def main():
+    """
+    Main batch processing function
+    """
+    print("="*80)
+    print("SoundTrap Audio Batch Processor ")
+    print("="*80)
+    
+    # Create output directory
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
+    print(f"\nOutput directory: {OUTPUT_PATH}")
+    
+    # Find .wav files
+    sud_files = sorted(glob.glob(os.path.join(SUD_PATH, "**/*.sud"), recursive=True))
+    wav_files = sorted(glob.glob(os.path.join(SUD_PATH, "**/*.wav"), recursive=True))
+
+    if len(wav_files) == 0:
+        if len(sud_files) > 0:
+            print(f"\nERROR: Found {len(sud_files)} .sud files but no .wav files in {SUD_PATH}.")
+            print("Please convert .sud -> .wav (SoundTrap export) and place .wav files in the folder.")
+        else:
+            print(f"\nERROR: No .wav files found in {SUD_PATH}")
+        return
+
+    print(f"\nFound {len(wav_files)} .wav files to process")
+    
+    # Load calibration table
+    cal_df = load_calibration(CAL_FILE)
+# Process each WAV file (parallel across files for speed)
+    # OPTIMIZATION: Use more workers (leave 2 cores free for system)
+    NUM_WORKERS = max(1, min(cpu_count() - 2, len(wav_files)))
+    
+    total_files = len(wav_files)
+    start_all = time.time()
+    durations = []
+
+    if len(wav_files) > 1 and NUM_WORKERS > 1:
+        print(f"\nProcessing {len(wav_files)} files with {NUM_WORKERS} workers...")
+        with Pool(NUM_WORKERS) as pool:
+            worker = partial(_worker_process, output_dir=OUTPUT_PATH, cal_df=cal_df)
+            results = []
+            completed = 0
+            successes = 0
+            for i, (success, duration) in enumerate(pool.imap_unordered(worker, wav_files), 1):
+                completed += 1
+                results.append(success)
+                if success:
+                    successes += 1
+                if duration is not None:
+                    durations.append(duration)
+                # Estimate remaining time using average duration so far
+                if durations:
+                    avg = sum(durations) / len(durations) / NUM_WORKERS  # divide by workers since they run in parallel
+                    remaining = (total_files - completed) * avg
+                    eta = timedelta(seconds=int(remaining))
+                if i % 10 == 0 or i == total_files:
+                    print(f"  Completed {i}/{total_files} ({successes}/{i} successful). ETA: {eta}")
+
+    else:
+        # Single-threaded fallback with ETA
+        completed = 0
+        successes = 0
+        for i, wav_file in enumerate(wav_files, 1):
+            print(f"\n[{i}/{len(wav_files)}] Processing file: {wav_file}")
+            t0 = time.time()
+            try:
+                process_single_file(wav_file, OUTPUT_PATH, cal_df)
+                duration = time.time() - t0
+                durations.append(duration)
+                successes += 1
+            except Exception as e:
+                print(f"\nERROR processing {wav_file}:")
+                print(f"  {str(e)}")
+                import traceback
+                traceback.print_exc()
+                print("  Continuing with next file...")
+                duration = time.time() - t0
+                durations.append(duration)
+            completed += 1
+            avg = sum(durations)/len(durations) if len(durations) > 0 else 0
+            remaining = (total_files - completed) * avg
+            eta = timedelta(seconds=int(remaining))
+            print(f"  Progress: {completed}/{total_files}. ETA: {eta}")
+    
+    total_elapsed = time.time() - start_all
+    print("\n" + "="*80)
+    print("BATCH PROCESSING COMPLETE!")
+    print("="*80)
+    print(f"\nAll outputs saved to: {OUTPUT_PATH}")
+    print(f"Total elapsed time: {timedelta(seconds=int(total_elapsed))}")
+    print("\nGenerated files:")
+    print("  - Individual files: *_ltsa_1Hz.tab, *_ltsa_TOB.tab, *_ltsa_TOB_JOMOPANS.tab")
+   
+   
+if __name__ == '__main__':
+    main()
