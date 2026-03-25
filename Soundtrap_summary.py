@@ -22,6 +22,11 @@ Output files
        Percentiles computed across ALL data (not per window).
        One row per (percentile, TOB band).
 
+Output selection
+----------------
+  Set CREATE_LTSA_CSV, CREATE_SPL_TIMESERIES_CSV, CREATE_QSD_CSV
+  in the CONFIGURATION block to choose which files to generate.
+
 Usage
 -----
 Edit the CONFIGURATION block below, then run:
@@ -70,6 +75,11 @@ PERCENTILES = [1, 5, 25, 50, 75, 95, 99]
 
 # TOB bands (Hz) to include in the SPL time-series summary
 SPL_BANDS_HZ = [63, 125, 200, 500]
+
+# Output selection (set to False to skip writing that file)
+CREATE_LTSA_CSV          = True
+CREATE_SPL_TIMESERIES_CSV = True
+CREATE_QSD_CSV            = True
 
 # ============================================================================
 # DEPLOYMENT CLIPPING
@@ -378,53 +388,74 @@ def main():
     # ------------------------------------------------------------------
     # 1. LTSA CSV  –  long format: DateTime | TOB | SPL
     # ------------------------------------------------------------------
-    print(f"\n[1/3] Computing LTSA (median SPL per window per TOB) …")
-    ltsa_df   = compute_ltsa(grouped, freq_cols)
     ltsa_path = os.path.join(OUTPUT_PATH, f"ltsa_{suffix}.csv")
-    ltsa_df.to_csv(ltsa_path, index=False)
-    print(f"  Saved: ltsa_{suffix}.csv  ({len(ltsa_df):,} rows)")
+    if CREATE_LTSA_CSV:
+        print(f"\n[1/3] Computing LTSA (median SPL per window per TOB) …")
+        ltsa_df = compute_ltsa(grouped, freq_cols)
+        ltsa_df.to_csv(ltsa_path, index=False)
+        print(f"  Saved: ltsa_{suffix}.csv  ({len(ltsa_df):,} rows)")
+    else:
+        ltsa_df = None
+        print("\n[1/3] Skipping LTSA output (CREATE_LTSA_CSV=False)")
 
     # ------------------------------------------------------------------
     # 2. SPL time-series CSV
     # ------------------------------------------------------------------
-    print(f"\n[2/3] Computing SPL summaries for {SPL_BANDS_HZ} Hz bands …")
-    spl_df   = compute_spl_timeseries(
-        grouped, freq_cols, freqs_hz, SPL_BANDS_HZ, PERCENTILES
-    )
     spl_path = os.path.join(OUTPUT_PATH, f"spl_timeseries_{suffix}.csv")
-    spl_df.round(3).to_csv(spl_path, index=False)
-    print(f"  Saved: spl_timeseries_{suffix}.csv  ({len(spl_df):,} rows)")
+    if CREATE_SPL_TIMESERIES_CSV:
+        print(f"\n[2/3] Computing SPL summaries for {SPL_BANDS_HZ} Hz bands …")
+        spl_df = compute_spl_timeseries(
+            grouped, freq_cols, freqs_hz, SPL_BANDS_HZ, PERCENTILES
+        )
+        spl_df.round(3).to_csv(spl_path, index=False)
+        print(f"  Saved: spl_timeseries_{suffix}.csv  ({len(spl_df):,} rows)")
+    else:
+        spl_df = None
+        print("\n[2/3] Skipping SPL time-series output (CREATE_SPL_TIMESERIES_CSV=False)")
 
     # ------------------------------------------------------------------
     # 3. Quantile Spectral Density CSV  –  computed across ALL data
     # ------------------------------------------------------------------
-    print(f"\n[3/3] Computing Quantile Spectral Density "
-          f"(P{PERCENTILES}) across all data …")
-    qsd_df   = compute_qsd(full_df, freq_cols, PERCENTILES)
     qsd_path = os.path.join(OUTPUT_PATH, f"quantile_spectral_density_{suffix}.csv")
-    qsd_df.to_csv(qsd_path, index=False)
-    print(f"  Saved: quantile_spectral_density_{suffix}.csv  ({len(qsd_df):,} rows)")
+    if CREATE_QSD_CSV:
+        print(f"\n[3/3] Computing Quantile Spectral Density "
+              f"(P{PERCENTILES}) across all data …")
+        qsd_df = compute_qsd(full_df, freq_cols, PERCENTILES)
+        qsd_df.to_csv(qsd_path, index=False)
+        print(f"  Saved: quantile_spectral_density_{suffix}.csv  ({len(qsd_df):,} rows)")
+    else:
+        qsd_df = None
+        print("\n[3/3] Skipping quantile spectral density output (CREATE_QSD_CSV=False)")
 
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
     print("\n" + "=" * 70)
-    print("Complete.  Output files:")
-    print(f"  {ltsa_path}")
-    print(f"  {spl_path}")
-    print(f"  {qsd_path}")
-    print()
-    print("CSV schemas:")
-    print(f"  ltsa_{suffix}.csv")
-    print("    DateTime | TOB | SPL")
-    print()
-    print(f"  spl_timeseries_{suffix}.csv")
-    print("    DateTime | band_hz | mean | median | std | min | "
-          + " | ".join(f"p{p:02d}" for p in PERCENTILES)
-          + " | max | n_samples")
-    print()
-    print(f"  quantile_spectral_density_{suffix}.csv")
-    print("    percentile | TOB | SPL  (computed across full deployment)")
+    print("Complete. Output files (generated):")
+    if CREATE_LTSA_CSV:
+        print(f"  {ltsa_path}")
+    if CREATE_SPL_TIMESERIES_CSV:
+        print(f"  {spl_path}")
+    if CREATE_QSD_CSV:
+        print(f"  {qsd_path}")
+    if not (CREATE_LTSA_CSV or CREATE_SPL_TIMESERIES_CSV or CREATE_QSD_CSV):
+        print("  (none selected; set output flags in config to True)")
+
+    print() 
+    print("CSV schemas (for enabled outputs):")
+    if CREATE_LTSA_CSV:
+        print(f"  ltsa_{suffix}.csv")
+        print("    DateTime | TOB | SPL")
+        print()
+    if CREATE_SPL_TIMESERIES_CSV:
+        print(f"  spl_timeseries_{suffix}.csv")
+        print("    DateTime | band_hz | mean | median | std | min | "
+              + " | ".join(f"p{p:02d}" for p in PERCENTILES)
+              + " | max | n_samples")
+        print()
+    if CREATE_QSD_CSV:
+        print(f"  quantile_spectral_density_{suffix}.csv")
+        print("    percentile | TOB | SPL  (computed across full deployment)")
     print("=" * 70)
 
 

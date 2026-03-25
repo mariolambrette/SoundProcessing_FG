@@ -30,9 +30,6 @@ import warnings
 import time
 warnings.filterwarnings('ignore')
 
-# Import functions from Py_functions package (folder)
-from Py_functions.calibration import load_calibration, apply_calibration
-
 try:
     import soundfile as sf
     SOUNDFILE_AVAILABLE = True
@@ -62,13 +59,14 @@ LTSA_MAX_FREQ = 50000  # Hz
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
-from data_loading import *
-from calibration import *
+# Import functions from Py_functions package (folder)
+from Py_functions.data_loading import *
+from Py_functions.calibration import load_calibration, apply_calibration
 
 # ============================================================================
 # LTSA GENERATION
 # ============================================================================
-from LTSAs import make_freq_vector_tob, compute_ltsa_tob_jomopans
+from Py_functions.LTSAs import make_freq_vector_tob, compute_ltsa_tob_jomopans
 
 # ============================================================================
 # MAIN PROCESSING FUNCTION
