@@ -14,18 +14,18 @@ A collection of Python scripts and modules for acoustic data loading, calibratio
 - `WavBatchProcessing/` - Batch processing utilities for WAV files. Transforms wav files into 1-second, TOB sound pressure level matrices saved to .tab files for post-processing. 
 TOB sound pressure level estimation follows guidelines from project JOMOPANS (http://northsearegion.eu/jomopans/about/index.html), outlined in their Standards for Data Processing report (https://vb.northsearegion.eu/public/files/repository/20190329144007_Jomopans_WP3standardDataProcessing_v15.pdf).
 
-User can select the output time window and maximum frequency of output (default 50k Hz)
+  User can select the output time window and maximum frequency of output (default 50k Hz)
 
-Options for 1-second, 1Hz resolution and variable temporal resolution windows to be implemented.
+  Options for 1-second, 1Hz resolution and variable temporal resolution windows to be implemented.
 
 - `Soundtrap_summary.py` - Main summary script for audio data pre-processed through WavBatchProcessing. 
 Computes and exports summary tables including:
   - LTSA (long format for R viz)
-  - Qunatile Spectral plots
+  - Quantile Spectral plots
   - SPL timeseries for user-selected TOBs (long format for R viz)
   - Loud Event detections
 
-Users should define the summary window and select which outputs are created.
+  Users should define the summary window and select which outputs are created. Other psecs for each output are also editable in set up.
 
 - `Py_functions/` - Reusable function library with submodules:
   - `calibration.py` - Calibration routines (e.g., hydrophone sensitivity, SPL correction).
