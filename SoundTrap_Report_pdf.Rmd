@@ -3,6 +3,9 @@ geometry: "left=1.5cm,right=1.5cm,top=1.5cm,bottom=1.5cm"
 output:
   pdf_document:
     toc: false
+header-includes:
+ - \usepackage{helvet}
+ - \renewcommand{\familydefault}{\sfdefault}
 ---
 
 <style>
@@ -17,8 +20,6 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE,
   fig.align = "center",
-  fig.width = 10,
-  fig.height = 5,
   out.width = "100%",
   dev = "png",        # force PNG instead of SVG (SVG is huge for rasters)
   dpi = 300
@@ -31,6 +32,7 @@ library(dplyr)
 library(scales)
 library(gridExtra)
 library(grid)
+library(ggtext)
 library(lubridate)
 library(sf)
 library(patchwork)
@@ -51,8 +53,11 @@ station <- 21
 # Land polygon (coastline)
 land_sf <- read_sf('/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/GIS/Land/gadm36_0.shp')
 
+#PDAs polygon
+pda_sf <- read_sf('/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/GIS/PDAs/PDAs.shp')
+
 # Stations point data (8 stations in a grid)
-stations_sf <- read_sf("/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/GIS/s3_locations_wgs84.shp")
+stations_sf <- read_sf("/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/GIS/s3_locations_new_wgs84.shp")
 names(stations_sf)[1]<-"Station"
 
 # Get coordinates of the focal station
@@ -67,24 +72,23 @@ bbox <- c(xmin = -8, xmax = -4, ymin = 49.8, ymax = 52.2)
 
 theme_custom <- theme_classic()+
   theme(
+    axis.line = element_blank(),
     axis.text.y = element_text(angle = 90, hjust = 0.5),
     axis.text = element_text(family = "Helvetica", size = 10),
     axis.title = element_text(family = "Helvetica", size = 12),
-    plot.title = element_text(family = "Helvetica", size = 14, face=("bold")),
     panel.background = element_rect(fill = "white", colour = "NA"),
     panel.border = element_rect(colour = "black", fill = NA, linewidth = 1),
     panel.grid = element_line(colour = "grey90", linewidth = 0.3),
     legend.position = "top",
     legend.title = element_blank(),
     legend.text = element_text(size = 8),
-    legend.direction = "horizontal"
+    legend.direction = "horizontal",
+    plot.title = element_markdown(family = "Helvetica", color = "black", size = 16)
   )
 
 ```
 
-
-# Station S `r sprintf("%02d",station)` - Service Report
-
+# Station S`r sprintf("%02d",station)` - Service Report
 
 ```{r title_page_layout, fig.width=12, fig.height=6, out.width="100%"}
 
@@ -95,64 +99,81 @@ end <- meta$DateTime_retrieve_UTC[meta$Station==paste0("S",station)]
 # Station details
 station_info <- data.frame(
   label = c("Station N:",
-            "Deployment Period:",
-            "Position:",
+            "Deployment period:",
+            "Location (WGS84):",
             "Depth:",
-            "VR2AR Serial:",
-            "FPOD Serial:",
-            "Hydrophone Serial:",
-            "Hydrophone duty cycle:"),
+            "VR2AR serial:",
+            "FPOD serial:",
+            "Hydrophone serial:",
+            "Hydrophone duty cycle:",
+            "Report generated"),
   value = c(paste0("S", sprintf("%02d",station)),
             paste0(date(start)," to ", date(end)),
-            paste0(meta$Latitude_deploy[meta$Station==paste0("S", sprintf("%02d",station))],", ",meta$Longitude_deploy[meta$Station==paste0("S", sprintf("%02d",station))]),
+            paste0(meta$Latitude_deploy[meta$Station==paste0("S", sprintf("%02d",station))],"°,  ",meta$Longitude_deploy[meta$Station==paste0("S", sprintf("%02d",station))],"°"),
             "120 m",
             meta$ARC_VR2AR[meta$Station==paste0("S", sprintf("%02d",station))],
             meta$FPOD[meta$Station==paste0("S", sprintf("%02d",station))],
             meta$Hydrophone[meta$Station==paste0("S", sprintf("%02d",station))],
-            "50% on (15 min)"
+            "50% on (15 min in 30 min)",
+            format(Sys.Date(), "%B %d, %Y")
   )
 )
 
 # Create text layout (left side)
 left_plot <- ggplot() +
-  geom_rect(aes(xmin = 0, xmax = 1, ymin = 0.82, ymax = 1.0),
-            fill = "#4472C4", color = "black", linewidth = 0.5) +
-  geom_rect(aes(xmin = 0, xmax = 1, ymin = 0, ymax = 0.82),
+  # geom_rect(aes(xmin = 0, xmax = 1, ymin = 0.82, ymax = 1.0),
+  #           fill = "#85bec7", color = "black", linewidth = 0.5) +
+  geom_rect(aes(xmin = 0, xmax = 2, ymin = 0, ymax = 1),
             fill = "white", color = "black", linewidth = 0.5) +
-  geom_text(aes(x = 0.1, y = 0.9, label = "Station Details"),
-            size = 6, fontface = "bold", hjust = 0) +
-  geom_text(aes(x = 0.1, y = 0.75,
+  # geom_text(aes(x = 0.1, y = 0.9, label = "Station Details"),
+  #           size = 6, fontface = "bold", hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.93,
                 label = paste(station_info$label[1], station_info$value[1], sep = " ")),
-            size = 4, hjust = 0) +
-  geom_text(aes(x = 0.1, y = 0.65,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.85,
+                label = paste(station_info$label[9], station_info$value[9], sep = " ")),
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.72,
                 label = paste(station_info$label[2], station_info$value[2], sep = " ")),
-            size = 4, hjust = 0) +
-  geom_text(aes(x = 0.1, y = 0.55,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.62,
                 label = paste(station_info$label[3], station_info$value[3], sep = " ")),
-            size = 4, hjust = 0) +
-  geom_text(aes(x = 0.1, y = 0.45,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.52,
                 label = paste(station_info$label[4], station_info$value[4], sep = " ")),
-            size = 4, hjust = 0) +
-    geom_text(aes(x = 0.1, y = 0.35,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.38,
                 label = paste(station_info$label[5], station_info$value[5], sep = " ")),
-            size = 4, hjust = 0) +
-    geom_text(aes(x = 0.1, y = 0.25,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.28,
                 label = paste(station_info$label[6], station_info$value[6], sep = " ")),
-            size = 4, hjust = 0) +
-    geom_text(aes(x = 0.1, y = 0.15,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.18,
                 label = paste(station_info$label[7], station_info$value[7], sep = " ")),
-            size = 4, hjust = 0) +
-      geom_text(aes(x = 0.1, y = 0.05,
+            size = 5, hjust = 0) +
+  geom_text(aes(x = 0.1, y = 0.08,
                 label = paste(station_info$label[8], station_info$value[8], sep = " ")),
-            size = 4, hjust = 0) +
-  xlim(0, 1) + ylim(0, 1) +
+            size = 5, hjust = 0) +
+  xlim(0, 2) + ylim(0, 1) +
+  scale_x_continuous(expand = c(0,0), breaks = c(0,1), labels = c(" "," "))+
+  scale_y_continuous(expand = c(0,0))+
   theme_void() +
-  theme(plot.background = element_rect(fill = "white", colour = NA))
+  theme(
+    axis.title.x = element_text(family = "Helvetica", size = 12),
+    axis.text.x = element_text(family = "Helvetica", size = 10),
+    panel.background = element_rect(fill = "white", colour = "NA"),
+    panel.border = element_rect(colour = "black", fill = NA, linewidth = 1),
+    plot.title = element_text(family = "Helvetica", size = 16, face=("bold")),
+    panel.margin = unit(0, 'mm')
+  )+
+  labs(title = "Station details", x = " ")
 
 # Create placeholder map (right side) - simple scatter plot as placeholder
 map_plot <- ggplot() +
   # Land
   geom_sf(data = land_sf, fill = "gray80", color = "gray50", size = 0.3) +
+  #PDAs
+  geom_sf(data = pda_sf, fill = "darkblue", colour = "darkblue", alpha=0.3)+
   # All stations (small points)
   geom_sf(data = stations_sf, shape = 21, fill = "white", color = "black", size = 2) +
   # Focal station (larger, different symbol)
@@ -164,11 +185,22 @@ map_plot <- ggplot() +
   coord_sf(xlim = c(bbox["xmin"], bbox["xmax"]),
            ylim = c(bbox["ymin"], bbox["ymax"]),
            expand = FALSE) +
-  theme_custom+
   theme(
-    #plot.background = element_rect(fill = "#e8f4f8", colour = "grey70", linewidth = 1),
-    panel.background = element_rect(fill = "#e8f4f8", color = "black", linewidth = 1.5),
+    axis.line = element_blank(),
+    axis.text.y = element_text(angle = 90, hjust = 0.5),
+    axis.text = element_text(family = "Helvetica", size = 10),
+    axis.title = element_text(family = "Helvetica", size = 12),
+    
+    panel.border = element_rect(colour = "black", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "#e8f4f8", color = "black", linewidth = 1),
     panel.grid = element_line(colour = "grey90"),
+    
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 8),
+    legend.direction = "horizontal",
+    
+    plot.title = element_text(family = "Helvetica", size = 16, face="bold"),
     plot.margin = margin(0, 0, 0, 0)
   )+
   labs(title = "Station location", x = "Longitude", y = "Latitude")
@@ -177,11 +209,10 @@ map_plot <- ggplot() +
 grid.arrange(left_plot, map_plot, ncol = 2, widths = c(0.4, 0.6))
 ```
 
-\vspace{0.1in}
 
 ## Environmental Conditions
 
-```{r ctd_current_wind, fig.width=14, fig.height=8, out.width="100%"}
+```{r ctd_current_wind, fig.width=12, fig.height=8, out.width="100%"}
 
 # Download weather data
 base_url <- "https://archive-api.open-meteo.com/v1/archive"
@@ -225,21 +256,21 @@ weather_df <- weather_df %>%
 
 
 # Plot Wind Speed data
-p1 <- ggplot(data = weather_df, aes( x = DateTime, y = wind_speed_mean))+
+wind_speed <- ggplot(data = weather_df, aes( x = DateTime, y = wind_speed_mean))+
   geom_ribbon(aes(ymin = 0, ymax = wind_speed_mean), fill = "#001744", colour = "NA", alpha = 0.7)+
   geom_line(colour = "#001744", linewidth = 0.5)+
   scale_y_continuous("Wind speed (m/s)", expand = c(0,0))+
   scale_x_datetime("Date", breaks = "10 days", expand = c(0,0))+
   theme_custom+
-  labs(title = "Wind Speed")
+  labs(title = "<b>Wind speed</b> <i style='font-size:14pt'>(source: OpenMeteo)</i>")
 
 # Plot wind direction data
-p2 <- ggplot(data = weather_df, aes( x = DateTime, y = wind_direction_mean))+
+wind_dir <- ggplot(data = weather_df, aes( x = DateTime, y = wind_direction_mean))+
   geom_line(colour = "#001744", linewidth = 0.5)+
   scale_y_continuous("Wind direction", expand = c(0,0))+
   scale_x_datetime("Date", breaks = "10 days", expand = c(0,0))+
   theme_custom+
-  labs(title = "Wind Direction")
+  labs(title = "<b>Wind direction</b> <i style='font-size:14pt'>(source: OpenMeteo)</i>")
 
 # Get current data from POLPRED
 current_data <- read.csv('/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Data/POLPRED/S21_14oct25_16Jan26.csv', skip = 4)
@@ -258,13 +289,14 @@ cmean <- current_data %>%
   )
 
 # Plot current data
-p3 <- ggplot(current_data, aes(x = time, y = current_speed)) +
+curr_speed <- ggplot(current_data, aes(x = time, y = current_speed)) +
   geom_point(size = 1, colour = "#1b9e77", alpha = 0.5) +
   geom_ribbon(data= cmean, aes(x = DateTime, ymin = current_speed_mean-current_speed_sd, ymax = current_speed_mean+current_speed_sd), fill = "grey80", alpha = 0.5, inherit.aes = F)+
   geom_line(data= cmean, aes(x = DateTime, y = current_speed_mean), colour = "#1b9e77", linewidth = 1.5, inherit.aes = F)+
    scale_x_datetime("Date", breaks = "10 days", expand = c(0,0))+
   theme_custom+
-  labs(title = "Bottom Current Speed", x = "Time (hours)", y = "Speed (m/s)")
+  labs(title = "<b>Bottom current speed</b> <i style='font-size:14pt'>(source: Polpred C320)</i>")+
+  labs(x = "Time (hours)", y = "Speed (m/s)")
 
 # Get temeprature data from VR2AR
 # Read skipping the first 4 header rows, no column names
@@ -295,19 +327,35 @@ temp_df <- raw %>%
     temperature_sd      = sd(temp_ambient)
   )
 
-p4 <- ggplot(temp_df, aes(x = DateTime)) +
-  geom_ribbon(aes(ymin = temperature_mean-temperature_sd, ymax = temperature_mean+temperature_sd), fill = "grey80", alpha = 0.5)+
-  geom_line(aes(y = temperature_mean), colour = "#d17432", linewidth = 1.5)+
+t_pod <- read.csv('/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Data/Processed_Sensors/FPod/S21/S21_R1/S21_R1 2025 10 10 FPOD_8432 file0 PART 93d 11h 38m mixed  DetEnv.csv')
+t_pod$DateTime <- as.POSIXct(t_pod$ChunkEnd, formqat = "%Y/%m/%d %H:%M", tz = "GMT")
+t_pod <- filter (t_pod, DateTime >= start, DateTime <= end)
+
+temp <- ggplot(temp_df, aes(x = DateTime)) +
+  geom_line(data = t_pod, aes(y = Temp), colour = "black", alpha = 0.8, linewidth = 1)+
+  geom_line(aes(y = temperature_mean), colour = "#d17432", linewidth = 1)+
   #geom_ribbon(data = weather_df, aes(ymin = temperature_mean-temperature_sd, ymax = temperature_mean+temperature_sd), fill = "grey80", alpha = 0.5)+
   #geom_line(data = weather_df, aes(y = temperature_mean))+
    scale_x_datetime("Date", breaks = "10 days", expand = c(0,0))+
   theme_custom+
-  labs(title = "Bottom water temperature", x = "Date", y = "°C")
+  labs(title = "<b>Bottom water temperature</b> <i style='font-size:14pt'>(source: VR2AR & FPod)</i>")+
+  labs(x = "Date", y = "°C")+
+  annotation_custom(
+    grob = grobTree(
+      segmentsGrob(x0 = 0.87, x1 = 0.89, y0 = 0.875, y1 = 0.875,
+                   gp = gpar(col = "#d17432", lwd = 2)),
+      textGrob("VR2AR", x = 0.895, y = 0.875, hjust = 0,
+               gp = gpar(fontsize = 8, fontfamily = "Helvetica")),
+      segmentsGrob(x0 = 0.94, x1 = 0.96, y0 = 0.875, y1 = 0.875,
+                   gp = gpar(col = "black", lwd = 2)),
+      textGrob("FPod", x = 0.965, y = 0.875, hjust = 0,
+               gp = gpar(fontsize = 8, fontfamily = "Helvetica"))
+    ),
+    xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf
+  )
 
-grid.arrange(p1, p2, p3, p4, ncol = 1)
+grid.arrange(wind_speed, wind_dir, curr_speed, temp, ncol = 1)
 ```
-
-Wind data: OpenMeteo. Current data : POLPRED. Temperature data: VR2AR sensor.
 
 \pagebreak
 
@@ -315,7 +363,7 @@ Wind data: OpenMeteo. Current data : POLPRED. Temperature data: VR2AR sensor.
 
 \vspace{0.1in}
 
-```{r quantiles_plot, fig.width=11, fig.height=4.5, out.width="100%"}
+```{r quantiles_plot, fig.width=12, fig.height=4.5, out.width="100%"}
 #quant_file <- file.path(output_path, "all_quantiles.csv")
 quant_file <- file.path(paste0(data_path,"Processed_Sensors/SoundTrap/S21/S21_R1/quantile_spectral_density_12h.csv"))
 
@@ -337,18 +385,19 @@ if (file.exists(quant_file)) {
     ) +
     theme_custom +
     theme(legend.position = "right", legend.direction = "vertical")+
-    labs(title = "Spectral Quantiles", x = "Frequency (Hz)", y = "Power (dB re 1µPa²/Hz)")
+    labs(title = "<b>Spectral Quantiles</b> <i style='font-size:14pt'>(Distribution of acoustic energy across TOB frequencies)</i>")+
+    labs(x = "Frequency (Hz)", y = "Power (dB re 1µPa²/Hz)")
 } else {
   cat("Quantiles file not found")
 }
 
 #ggsave("/Users/francescogarzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Figures/S4Station/Quatiles.jpg", last_plot(), height = 10, width = 15, units = "cm")
 ```
-Distribution of acoustic energy across TOB frequencies.
 
-\vspace{0.1in}
 
-```{r ltsa_plot, fig.width=11, fig.height=5, out.width="100%"}
+\vspace{0.2in}
+
+```{r ltsa_plot, fig.width=12, fig.height=7, out.width="100%"}
 #ltsa_file <- file.path(output_path, "all_ltsa.csv")
 ltsa_file <- file.path(paste0(data_path,"Processed_Sensors/SoundTrap/S21/S21_R1/ltsa_12h.csv"))
 
@@ -370,19 +419,65 @@ if (file.exists(ltsa_file)) {
     #scale_y_log10()+
     scale_fill_viridis_c(name = "Power\n(dB re 1µPa²/Hz)", na.value = "grey95") +
     theme_custom +
-    theme(legend.position = "right", legend.direction = "vertical")+
-    labs(title = "Long-Term Spectral Average (LTSA)", x = "Time", y = "Frequency (Hz)")
+    theme(legend.position = "bottom", 
+          legend.title = element_text())+
+    labs(title = "<b>Long-Term Spectral Average (LTSA).</b> <i style='font-size:14pt'> Acoustic energy distribution across deployment,12-hour resolution and TOB frequency bins <br/> clipped to 10-9500 Hz.</i>")+
+    labs(x = "Date", y = "Frequency (Hz)")
 } else {
   cat("LTSA file not found")
 }
 
 #ggsave("/Users/francescogarzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Figures/S4Station/LTSA.jpg", last_plot(), height = 10, width = 15, units = "cm")
 ```
-Acoustic energy distribution across deployment, with 12-hour temporal resolution and TOB frequency bins clipped to 10-9500 Hz.
 
 \vspace{0.1in}
 
-```{r spl_plot, fig.width=11, fig.height=10, out.width="100%"}
+```{r loud_event, fig.width=12, fig.height=6, out.width="100%"}
+#spl_file <- file.path(output_path, "all_spl.csv")
+loud_file <- file.path(paste0(data_path,"Processed_Sensors/SoundTrap/S21/S21_R1/loud_events.csv"))
+
+if (file.exists(loud_file)) {
+  loud <- read_csv(loud_file, show_col_types = FALSE)
+  loud$DateTime <- as.POSIXct(loud$start_time)
+  loud <- filter(loud,
+                 #spectral_centroid_hz >=100,
+                 delta_peak_dB >=10)
+  
+  loud_12h <- mutate(loud, DateTime12 = floor_date(DateTime, "24 hours"))%>%
+    group_by(DateTime12)%>%
+    summarise(ncount = n())
+
+  count <- ggplot(data = loud_12h, aes(x = DateTime12, y = ncount))+
+    geom_col(fill = "lightgrey", colour = "black", linewidth = 0.2, )+
+    scale_x_datetime("Date", limits = c(start, end), expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
+    scale_y_continuous("Events/day")+
+    theme_custom+
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank())+
+    labs(title = "<b>Broadband loud event detections.</b> <i style='font-size:14pt'> (Acoustic energy > 10dB above ambient levels) </i>")
+  
+  events <- ggplot(loud, aes(x = DateTime, y=spectral_centroid_hz, colour = delta_peak_dB, alpha = delta_peak_dB))+
+    geom_point(size = 2, alpha = 0.8) +
+    scale_y_log10("Spectral Centroid Frequency (Hz)")+
+    scale_x_datetime("Date", limits = c(start, end), expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
+    scale_colour_viridis_c("Delta SPL (dB)", limits = c(10,20))+
+    theme_custom+
+    theme(legend.position = "bottom",
+          legend.title = element_text(vjust = 0.7))+
+    labs(x = "Date", y = "SPL (dB re 1µPa)")
+  
+  grid.arrange(count, events,  ncol = 1, heights = c(0.4,1))
+  
+} else {
+  cat("SPL file not found")
+}
+
+#ggsave("/Users/francescogarzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Figures/S4Station/TOB_SPL.jpg", last_plot(), height = 10, width = 15, units = "cm")
+```
+
+\vspace{0.1in}
+
+```{r spl_plot, fig.width=12, fig.height=7, out.width="100%"}
 #spl_file <- file.path(output_path, "all_spl.csv")
 spl_file <- file.path(paste0(data_path,"Processed_Sensors/SoundTrap/S21/S21_R1/spl_timeseries_12h.csv"))
 
@@ -400,130 +495,123 @@ if (file.exists(spl_file)) {
     scale_y_continuous("SPL (dB re 1 uPa)")+
     scale_x_datetime("Date", expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
     theme_custom+
-    theme(legend.position = "none")+
-    labs(title = "Sound Pressure Level (SPL) Time Series", x = "Time", y = "SPL (dB re 1µPa)")
+    theme(legend.position = "none",
+          strip.background =element_rect(fill="lightgrey"),
+          strip.text = element_text(family = "Helvetica",size = 10))+
+    labs(title = "<b>Sound Pressure Level (SPL) time series.</b> <i style='font-size:14pt'> (12-hourly averaged sound pressure levels in selected TOBs.) </i>")+
+    labs(x = "Time", y = "SPL (dB re 1µPa)")
 } else {
   cat("SPL file not found")
 }
 
 #ggsave("/Users/francescogarzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Figures/S4Station/TOB_SPL.jpg", last_plot(), height = 10, width = 15, units = "cm")
 ```
-12-hourly averaged sound pressure levels in key third-octave bands.
+
 
 \pagebreak
 
-## Cetacean Detections
-
-Cetacean presence is expressed in "Detection-Positive 10-Minute intervals" (DP10M). These intervals represent the number of 10-minute intervals per week in which vocalisations were detected.
+## Cetacean and Sonar Detections
 
 \vspace{0.2in}
 
-```{r cetacean_presence, fig.width=14, fig.height=8, out.width="100%"}
+```{r cetacean_presence, fig.width=12, fig.height=8, out.width="100%"}
 # Create timeline of detections and species pie chart
 
-dol <- read.csv(list.files(paste0(data_path,"Processed_Sensors/FPod/S21/S21_R1"), pattern = "Dol DP10M.csv", full.names = T))
-dol$ChunkEnd <- as.POSIXct(dol$ChunkEnd, format = "%d/%m/%Y %H:%M", tz = "GMT")
-dol <- filter (dol,
-               ChunkEnd>= start, ChunkEnd<=end)
-dol$Hour <- hour(dol$ChunkEnd)
-dol$Day <- date(dol$ChunkEnd)
-dol$Week <- week(dol$ChunkEnd)
+dol <- read.csv(list.files(paste0(data_path,"Processed_Sensors/FPod/S21/S21_R1"), pattern = "Dol TrainDuration.csv", full.names = T))
+dol$Class <- "Dolphin"
 
-#dol <- filter(dol, Day >= as.POSIXct("2025-10-14 00:00:00"), Day <= as.POSIXct("2025-10-17 00:00:00"))
+nb <- read.csv(list.files(paste0(data_path,"Processed_Sensors/FPod/S21/S21_R1"), pattern = "NB TrainDuration.csv", full.names = T))
+nb$Class <- "Porpoise"
 
-nb <- read.csv(list.files(paste0(data_path,"Processed_Sensors/FPod/S21/S21_R1"), pattern = "NB DP10M.csv", full.names = T))
-nb$ChunkEnd <- as.POSIXct(nb$ChunkEnd, format = "%d/%m/%Y %H:%M", tz = "GMT")
-nb <- filter(nb,
-             ChunkEnd>= start, ChunkEnd<=end)
-nb$Hour <- hour(nb$ChunkEnd)
-nb$Day <- date(nb$ChunkEnd)
-nb$Week <- week(nb$ChunkEnd)
-#nb <- filter(nb, Day >= as.POSIXct("2025-10-14 00:00:00"), Day <= as.POSIXct("2025-10-17 00:00:00"))
+sonar <- read.csv(list.files(paste0(data_path,"Processed_Sensors/FPod/S21/S21_R1"), pattern = "Sonar TrainDuration.csv", full.names = T))
+sonar$Class <- "Sonar"
 
-dol_w <- group_by(dol, Day)%>%
-  summarise(DP10M_sum = sum(DP10M))
-nb_w <- group_by(nb, Day)%>%
-  summarise(DP10M_sum = sum(DP10M))
+cet_all <- rbind(dol, nb, sonar)
 
-dol_timeline <- ggplot(dol_w, aes(x = Day, y = DP10M_sum)) +
+cet_all$ChunkEnd <- as.POSIXct(cet_all$ChunkEnd, format = "%Y/%m/%d %H:%M", tz = "GMT")
+cet_all <- filter(cet_all,
+                  ChunkEnd>= start, ChunkEnd<=end)%>%
+  distinct()
+cet_all$Hour <- hour(cet_all$ChunkEnd)
+cet_all$Day <- date(cet_all$ChunkEnd)
+cet_all$Week <- week(cet_all$ChunkEnd)
+
+cet_all_w <- group_by(cet_all, Day, Class)%>%
+  summarise(TrainDuration = sum(Millisecs)/1000/60)
+
+cet_timeline <- ggplot(cet_all_w, aes(x = Day, y = TrainDuration, fill = Class)) +
   geom_col(fill = "white") +
-  geom_col(fill = "#2f3d61", alpha = 0.9) +
+  geom_col(alpha = 0.9) +
+  scale_fill_discrete(palette = c("#2f3d61","#462f61","#122b1f"))+
   scale_y_continuous(expand = c(0.03,0.0))+
   scale_x_datetime(expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
   theme_custom +
-  labs(title = "Dolphin Detection-positive 10 minute intervals (DP10M)", x = "Date", y = "# DP10M")
+  theme(legend.position = "none",
+        strip.background =element_rect(fill="lightgrey"),
+        strip.text = element_text(family = "Helvetica",size = 10))+
+  labs(title = "<b>Detections from FPod sensor.</b> <i style='font-size:14pt'> (Daily sum of train duration; Detection class: Hi) </i>")+
+  labs(x = "Date", y = "Total train duration (min)")+
+  facet_wrap(~Class, ncol = 1, scales = "free_y")
 
-nb_timeline <- ggplot(nb_w, aes(x = Day, y = DP10M_sum)) +
-  geom_col(fill = "white") +
-  geom_col(fill = "#462f61", alpha = 0.9) +
-  scale_y_continuous(expand = c(0.03,0.0))+
-  scale_x_datetime(expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
-  theme_custom +
-  labs(title = "Porpoise Detection-positive 10 minute intervals (DP10M)", x = "Date", y = "# DP10M")
-
-
-grid.arrange(dol_timeline, nb_timeline, ncol = 1, heights = c(0.5, 0.5))
+cet_timeline
 ```
 
-\vspace{0.2in}
+\vspace{0.1in}
 
-```{r cetacean_dielpatterns, fig.width=8, fig.height=5, out.width="100%"}
+```{r cetacean_dielpatterns, fig.width=12, fig.height=5, out.width="100%"}
 ndol <- sum(dol$DP10M)
-dol_dial <- group_by(dol, Hour)%>%
-  summarise(mean = mean(DP10M),
-            sd = sd(DP10M),
-            sum = sum(DP10M),
-            perc = 100 * sum/ndol)
+cet_dial <- group_by(cet_all, Class, Hour)%>%
+  summarise(mean = mean(Millisecs),
+            sd = sd(Millisecs),
+            sum = sum(Millisecs))%>%
+  ungroup()%>%
+  group_by(Class)%>%
+  mutate(perc = 100*sum/sum(sum))
 
-dol_dial2h <- mutate(dol_dial,
-                     Hour2 = as.integer(as.character(cut(Hour,
-                                                         breaks = seq(0,24, by  =2),
-                                                         right = F,
-                                                         labels = seq(0,23, by  =2))))
-                     )%>%
-  group_by(Hour2)%>%
-  summarise(perc = sum(perc))
-
-nnb <- sum(nb$DP10M)
-nb_dial <- group_by(nb, Hour)%>%
-  summarise(mean = mean(DP10M),
-            sd = sd(DP10M),
-            sum = sum(DP10M),
-            perc = 100 * sum/nnb)
-
-nb_dial2h <- mutate(nb_dial,
-                     Hour2 = as.integer(as.character(cut(Hour,
-                                                         breaks = seq(0,24, by  =2),
-                                                         right = F,
-                                                         labels = seq(0,23, by  =2))))
-                     )%>%
-  group_by(Hour2)%>%
-  summarise(perc = sum(perc))
-
-
-dol_rose <- ggplot(dol_dial2h, aes(x = Hour2, y = perc))+
-  geom_col(fill = "#2f3d61", alpha = 0.9, just = 0) +
-  scale_x_continuous(limits = c(0,24), breaks = seq(0,24, by = 2))+
-  scale_y_continuous(limits = c(0,25))+
+cet_rose <- ggplot(cet_dial, aes(x = Hour+0.5, y = perc, fill = Class))+
+  geom_col(fill = "white") +
+  geom_col(alpha = 0.9) +
+  scale_fill_discrete(palette = c("#2f3d61","#462f61","#122b1f"))+
+  scale_x_continuous(limits = c(0,24), breaks = seq(0,24, by = 1))+
+  #scale_y_continuous(limits = c(0,25))+
   #geom_point(size = 3, colour = "#2f3d61") +
   coord_polar()+
   theme_custom +
-  labs(title = "% Dolphin DP10M", x = "Date", y = "% DP10M")
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        strip.background =element_rect(fill="lightgrey"),
+        strip.text = element_text(family = "Helvetica",size = 10),
+        aspect.ratio = 1)+
+  labs(title = "<b>Diel pattern of detections from FPod sensor.</b> <i style='font-size:14pt'> (% of total train duration by hour. Detection class: Hi. Note varying y-axis) </i>")+
+  labs(x = "Hour", y = "% Total train duration")+
+  facet_wrap(~Class, nrow = 1, scales = "free_y")
 
-nb_rose <- ggplot(nb_dial2h, aes(x = Hour2, y = perc))+
-  geom_col(fill = "#462f61", alpha = 0.9, just = 0) +
-  scale_x_continuous(limits = c(0,24), breaks = seq(0,24, by = 2))+
-  scale_y_continuous(limits = c(0,25))+
-  #geom_point(size = 3, colour = "#2f3d61") +
-  coord_polar()+
-  theme_custom +
-  labs(title = "% Porpoise DP10M", x = "Hour", y = "% DP10M")
-
-grid.arrange(dol_rose, nb_rose, ncol = 2)
+cet_rose
 
 ```
-\vspace{0.3in}
+
+\pagebreak
+
+## Acoustic Tag Detections
+
+```{r VR2AR_detections, fig.width=12, fig.height=5, out.width="100%"}
+# Create timeline of detections
+
+det <- read.csv('/Users/f.garzon/Library/CloudStorage/OneDrive-UniversityofExeter/Projects/S3 Project - Documents/Data/Processed_Sensors/VR2AR/S21/S21_R1/VR2AR-69 556544 2026-02-13 155019 DETECTS_noHeader.csv')
+det$DateTime<- as.POSIXct(det$Device.Time..UTC.)
+
+det <- filter(det,
+              DateTime>=start, DateTime<=end)
+
+det_timeline <- ggplot(det, aes(x = DateTime, y = as.factor(Serial.Number))) +
+  geom_point(fill = "#2f3d61", alpha = 0.9) +
+  scale_x_datetime(expand = c(0,0), breaks = "10 days", date_labels = "%b %d")+
+  theme_custom +
+  labs(title = "<b>Timeline of detections from VR2AR.</b> <i style='font-size:14pt'> </i>")+
+  labs(x = "Date", y = "Serial")
+
+det_timeline
+
+```
 
 ***
-
-**Report Generated:** `r format(Sys.Date(), "%B %d, %Y")`
