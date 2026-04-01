@@ -1,4 +1,6 @@
-# SoundProcessing
+<img width="1107" height="494" alt="Screenshot 2026-04-01 at 15 31 09" src="https://github.com/user-attachments/assets/6f1a965a-b858-40e2-b8ca-054b8814b94c" />
+
+# Broadband Sound Processing
 
 A collection of Python scripts and modules for acoustic data loading, calibration, spectral analysis, and batch processing.
 
